@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"Monitor/config"
+	"Monitor/postgres_logger"
 	"Monitor/queue_reader"
 	"Monitor/queue_writer"
 	"Monitor/sql_server_checker"
@@ -38,7 +39,9 @@ func (m *Monitor) Start() {
 		queueReader := queue_reader.NewQueueReader(m.ctx, m.wg, m.cfg, m.mutex, writeChan, checkChan)
 		queueReader.Start()
 
-		sqlServerChecker := sql_server_checker.NewSqlServerChecker(m.ctx, m.wg, m.cfg, m.mutex, writeChan, checkChan)
+		postgresLogger := postgres_logger.NewPostgresLogger(m.ctx, m.wg, m.cfg, m.mutex)
+
+		sqlServerChecker := sql_server_checker.NewSqlServerChecker(m.ctx, m.wg, m.cfg, m.mutex, postgresLogger, writeChan, checkChan)
 		sqlServerChecker.Start()
 
 		queueWriter := queue_writer.NewQueueWriter(m.ctx, m.wg, m.cfg, m.mutex, writeChan)

@@ -43,9 +43,9 @@ func NewQueueReader(
 func (qr *QueueReader) Start() {
 	go func() {
 		qr.mutex.RLock()
-		brokers := qr.cfg.Kafka.Brokers
-		groupID := qr.cfg.Kafka.GroupID
-		readTopic := qr.cfg.Kafka.ReadTopic
+		brokers := qr.cfg.KafkaConfig.Brokers
+		groupID := qr.cfg.KafkaConfig.GroupID
+		readTopic := qr.cfg.KafkaConfig.ReadTopic
 		qr.mutex.RUnlock()
 		err := qr.consumeKafkaMessages(brokers, groupID, []string{readTopic})
 		if err != nil {

@@ -23,8 +23,8 @@ type QueueWriter struct {
 
 func NewQueueWriter(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, mutex *sync.RWMutex, writeChan chan string) *QueueWriter {
 	mutex.RLock()
-	brokers := cfg.Kafka.Brokers
-	topic := cfg.Kafka.WriteTopic
+	brokers := cfg.KafkaConfig.Brokers
+	topic := cfg.KafkaConfig.WriteTopic
 	mutex.RUnlock()
 
 	producer, err := kafka.NewProducer(&kafka.ConfigMap{
