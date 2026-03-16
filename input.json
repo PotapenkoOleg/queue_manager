@@ -1,0 +1,7 @@
+{
+  "Controller": "Data",
+  "Action": "Copy",
+  "SourceDatabase": "developer",
+  "SourceSchema": "PostgresTest",
+  "SourceTable": "TestTable"
+}

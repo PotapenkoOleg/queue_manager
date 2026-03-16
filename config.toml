@@ -1,0 +1,12 @@
+[sql_server]
+host = "localhost"
+port = 1433
+database = "developer"
+user = "sa"
+password = "wOf-odESTO2r"
+
+[kafka]
+brokers = "localhost:9092"
+group_id = "87c9548d-c52f-4ba1-9e69-b276b1640041"
+read_topic = "test_read"
+write_topic = "test_write"
