@@ -49,7 +49,6 @@ func (m *Monitor) Start() {
 		for {
 			select {
 			case <-m.ctx.Done():
-				// TODO: cleanup resources
 				log.Printf("Monitor stopped")
 				return
 			}

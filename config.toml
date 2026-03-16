@@ -5,6 +5,13 @@ database = "developer"
 user = "sa"
 password = "wOf-odESTO2r"
 
+[postgres]
+host = "localhost"
+port = 5432
+database = "developer"
+user = "postgres"
+password = "postgres"
+
 [kafka]
 brokers = "localhost:9092"
 group_id = "87c9548d-c52f-4ba1-9e69-b276b1640041"

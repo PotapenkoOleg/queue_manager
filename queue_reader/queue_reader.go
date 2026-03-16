@@ -11,6 +11,8 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
+const PollIntervalMilliSeconds = 100
+
 type QueueReader struct {
 	ctx       context.Context
 	wg        *sync.WaitGroup
@@ -20,7 +22,14 @@ type QueueReader struct {
 	checkChan chan string
 }
 
-func NewQueueReader(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, mutex *sync.RWMutex, writeChan chan string, checkChan chan string) *QueueReader {
+func NewQueueReader(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	cfg *config.Config,
+	mutex *sync.RWMutex,
+	writeChan chan string,
+	checkChan chan string,
+) *QueueReader {
 	return &QueueReader{
 		ctx:       ctx,
 		wg:        wg,
@@ -33,8 +42,14 @@ func NewQueueReader(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config,
 
 func (qr *QueueReader) Start() {
 	go func() {
-		err := qr.consumeKafkaMessages(qr.cfg.Kafka.Brokers, qr.cfg.Kafka.GroupID, []string{qr.cfg.Kafka.ReadTopic})
+		qr.mutex.RLock()
+		brokers := qr.cfg.Kafka.Brokers
+		groupID := qr.cfg.Kafka.GroupID
+		readTopic := qr.cfg.Kafka.ReadTopic
+		qr.mutex.RUnlock()
+		err := qr.consumeKafkaMessages(brokers, groupID, []string{readTopic})
 		if err != nil {
+			log.Fatal("Queue Reader failed to start ...")
 			return
 		}
 	}()
@@ -57,7 +72,7 @@ func (qr *QueueReader) consumeKafkaMessages(brokers, groupID string, topics []st
 	defer func(consumer *kafka.Consumer) {
 		err := consumer.Close()
 		if err != nil {
-			log.Printf("Failed to close consumer: %v\n", err)
+			log.Fatal("Failed to close consumer: %v\n", err)
 		}
 	}(consumer)
 
@@ -73,7 +88,7 @@ func (qr *QueueReader) consumeKafkaMessages(brokers, groupID string, topics []st
 			log.Printf("Caught signal %v: terminating\n", sig)
 			run = false
 		default:
-			ev := consumer.Poll(100)
+			ev := consumer.Poll(PollIntervalMilliSeconds)
 			if ev == nil {
 				continue
 			}
@@ -81,7 +96,6 @@ func (qr *QueueReader) consumeKafkaMessages(brokers, groupID string, topics []st
 			switch e := ev.(type) {
 			case *kafka.Message:
 				qr.processKafkaMessages(string(e.Value))
-
 				_, err := consumer.CommitMessage(e)
 				if err != nil {
 					log.Printf("Error committing message: %v\n", err)
@@ -109,6 +123,7 @@ func (qr *QueueReader) processKafkaMessages(message string) {
 		panic(err)
 	}
 	log.Printf("Controller: %s", result["Controller"])
+	// TODO: check Controller and Action names
 	if result["Controller"] == "Data" && result["Action"] == "Copy" {
 		qr.checkChan <- message
 		return

@@ -13,6 +13,9 @@ import (
 	_ "github.com/microsoft/go-mssqldb"
 )
 
+const DbCheckIntervalSeconds = 3
+const SqlServerTimeoutSeconds = 10
+
 type SqlServerChecker struct {
 	ctx        context.Context
 	wg         *sync.WaitGroup
@@ -24,7 +27,14 @@ type SqlServerChecker struct {
 	messageMap map[string]string
 }
 
-func NewSqlServerChecker(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, mutex *sync.RWMutex, writeChan chan string, checkChan chan string) *SqlServerChecker {
+func NewSqlServerChecker(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	cfg *config.Config,
+	mutex *sync.RWMutex,
+	writeChan chan string,
+	checkChan chan string,
+) *SqlServerChecker {
 	messageMap := make(map[string]string)
 	return &SqlServerChecker{
 		ctx:        ctx,
@@ -39,25 +49,24 @@ func NewSqlServerChecker(ctx context.Context, wg *sync.WaitGroup, cfg *config.Co
 
 func (ssc *SqlServerChecker) Start() {
 	go func() {
-		ticker := time.NewTicker(time.Second * 3)
+		ticker := time.NewTicker(time.Second * DbCheckIntervalSeconds)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ssc.ctx.Done():
-				// TODO: cleanup resources
 				log.Printf("Sql Server Checker stopped")
 				return
 			case <-ticker.C:
 				log.Printf("Sql Server Checker tick \n")
 				ssc.checkSqlServerTable()
 			case message := <-ssc.checkChan:
-				// TODO: add to processing
 				log.Printf("Sql Server Checker: Chan Message: %s\n", message)
 				var result map[string]any
 				if err := json.Unmarshal([]byte(message), &result); err != nil {
 					panic(err)
 				}
+				// TODO: check names
 				table := fmt.Sprintf("[%s].[%s]", result["SourceSchema"], result["SourceTable"])
 				ssc.checkQueue = append(ssc.checkQueue, table)
 				ssc.messageMap[table] = message
@@ -85,11 +94,11 @@ func (ssc *SqlServerChecker) checkSqlServerTable() {
 	defer func(db *sql.DB) {
 		err := db.Close()
 		if err != nil {
-			log.Printf("Failed to close database connection: %v", err)
+			log.Fatalf("Failed to close database connection: %v", err)
 		}
 	}(db)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*SqlServerTimeoutSeconds)
 	defer cancel()
 
 	err = db.PingContext(ctx)
@@ -103,21 +112,15 @@ func (ssc *SqlServerChecker) checkSqlServerTable() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer func(rows *sql.Rows) {
-			err := rows.Close()
-			if err != nil {
-				log.Printf("Failed to close rows: %v", err)
-			}
-		}(rows)
 
 		for rows.Next() {
-
 			var id sql.NullInt64
 			if err := rows.Scan(&id); err != nil {
 				log.Fatal(err)
 			}
 			if !id.Valid {
-				log.Printf("id is NULL\n")
+				// TODO: Log to postgres DB
+				log.Printf("ID is NULL\n")
 				continue
 			}
 
@@ -127,6 +130,11 @@ func (ssc *SqlServerChecker) checkSqlServerTable() {
 
 		if err := rows.Err(); err != nil {
 			log.Fatal(err)
+		}
+
+		err = rows.Close()
+		if err != nil {
+			log.Fatalf("Failed to close rows: %v", err)
 		}
 	}
 }
