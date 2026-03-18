@@ -16,6 +16,7 @@ import (
 
 const DbCheckIntervalSeconds = 3
 const SqlServerTimeoutSeconds = 10
+const MaxRetryCount = 3
 
 type SqlServerChecker struct {
 	ctx            context.Context
@@ -27,6 +28,7 @@ type SqlServerChecker struct {
 	checkChan      chan string
 	checkQueue     []string
 	messageMap     map[string]string
+	retryCountMap  map[string]int
 	connString     string
 }
 
@@ -49,6 +51,7 @@ func NewSqlServerChecker(
 	mutex.RUnlock()
 
 	messageMap := make(map[string]string)
+	retryCountMap := make(map[string]int)
 
 	return &SqlServerChecker{
 		ctx:            ctx,
@@ -59,6 +62,7 @@ func NewSqlServerChecker(
 		writeChan:      writeChan,
 		checkChan:      checkChan,
 		messageMap:     messageMap,
+		retryCountMap:  retryCountMap,
 		connString:     connString,
 	}
 }
@@ -86,6 +90,7 @@ func (ssc *SqlServerChecker) Start() {
 				table := fmt.Sprintf("[%s].[%s]", result["SourceSchema"], result["SourceTable"])
 				ssc.checkQueue = append(ssc.checkQueue, table)
 				ssc.messageMap[table] = message
+				ssc.retryCountMap[table] = MaxRetryCount
 			}
 		}
 	}()
@@ -124,17 +129,20 @@ func (ssc *SqlServerChecker) checkSqlServerTable() {
 			if err := rows.Scan(&id); err != nil {
 				log.Fatal(err)
 			}
-			if !id.Valid {
+			if !id.Valid && ssc.retryCountMap[table] > 0 {
 				// TODO: Log to postgres DB
 				err := ssc.postgresLogger.Info(fmt.Sprintf("ID is NULL for %s", table))
 				if err != nil {
 				}
 				log.Printf("MAX(ID) is NULL for %s\n", table)
+				ssc.retryCountMap[table] = ssc.retryCountMap[table] - 1
 				continue
 			}
 
 			ssc.writeChan <- ssc.messageMap[table]
 			ssc.checkQueue = removeFirstString(ssc.checkQueue, table)
+			delete(ssc.messageMap, table)
+			delete(ssc.retryCountMap, table)
 		}
 
 		if err := rows.Err(); err != nil {
